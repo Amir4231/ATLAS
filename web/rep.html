@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas — Class Rep</title>
+<link rel="manifest" href="manifest.json">
+<style>
+body{font-family:system-ui,sans-serif;max-width:640px;margin:1rem auto;padding:0 1rem}
+select,input,button{font-size:1rem;padding:.5rem;margin:.25rem 0}button{cursor:pointer}
+#code{font-size:2.5rem;letter-spacing:.5rem;font-family:monospace}
+.msg{margin:.5rem 0}.err{color:#b00}.ok{color:#060}
+ul{padding-left:1.2rem}li{margin:.2rem 0}.top{display:flex;justify-content:space-between;align-items:baseline}
+#qrFallback{color:#b00}
+</style>
+</head>
+<body>
+<div class="top"><h1>Class Rep</h1><span><span id="who"></span> <button id="out">Logout</button></span></div>
+<label>Class <select id="cls"></select></label>
+<button id="open">Open session</button>
+<button id="close" disabled>Close session</button>
+<p>Session: <b id="sess">none</b></p>
+<div id="qr"></div>
+<p id="qrFallback"></p>
+<p>Code: <span id="code">—</span> <span id="cd"></span></p>
+<p id="m" class="msg"></p>
+<h2>Live check-ins</h2>
+<ul id="feed"></ul>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="app.js"></script>
+<script>
+(function () {
+  var sessionId = 0, pollT = null, cdT = null, expAt = 0, qrObj = null;
+  Atlas.el('out').onclick = Atlas.logout;
+  Atlas.requireRole(['class_rep', 'rep', 'admin']).then(function (me) {
+    if (!me) return;
+    Atlas.el('who').textContent = me.email + ' (' + me.role + ')';
+    loadClasses();
+  });
+
+  async function loadClasses() {
+    var r = await Atlas.api('GET', '/v1/classes');
+    if (r.status !== 200) { Atlas.msg('m', 'Load classes failed (' + r.status + ')', true); return; }
+    Atlas.el('cls').innerHTML = r.data.classes.map(function (c) {
+      return '<option value="' + c.id + '">' + c.class_name + ' (#' + c.id + ')</option>';
+    }).join('');
+  }
+
+  Atlas.el('open').onclick = async function () {
+    var r = await Atlas.api('POST', '/v1/qr/session', { class_id: +Atlas.el('cls').value });
+    if (r.status !== 200) { Atlas.msg('m', 'Open session failed (' + r.status + '): ' + (r.data.error || ''), true); return; }
+    sessionId = r.data.session_id || r.data.id;
+    Atlas.el('sess').textContent = '#' + sessionId;
+    Atlas.el('close').disabled = false;
+    Atlas.msg('m', 'Session #' + sessionId + ' open', false);
+    tick(); pollFeed();
+    clearInterval(pollT); pollT = setInterval(function () { tick(); pollFeed(); }, 5000);
+  };
+
+  Atlas.el('close').onclick = async function () {
+    if (!sessionId) return;
+    var r = await Atlas.api('POST', '/v1/qr/session/' + sessionId + '/close', {});
+    clearInterval(pollT); Atlas.el('close').disabled = true;
+    Atlas.msg('m', r.status === 200 ? 'Session closed, marked_present=' + r.data.marked : 'Close failed (' + r.status + ')', r.status !== 200);
+  };
+
+  async function tick() {
+    if (!sessionId) return;
+    var r = await Atlas.api('GET', '/v1/qr/session/' + sessionId + '/code');
+    if (r.status !== 200) {
+      Atlas.msg('m', 'Code fetch failed (' + r.status + '): ' + (r.data.error || ''), true);
+      if (r.status === 410) clearInterval(pollT);
+      return;
+    }
+    var code = r.data.code, exp = r.data.exp != null ? r.data.exp : r.data.expires_at;
+    Atlas.el('code').textContent = code;
+    // API returns exp as unix seconds; tolerate RFC3339 strings too.
+    expAt = (typeof exp === 'number') ? exp * 1000 : Date.parse(exp);
+    if (!expAt) expAt = Date.now() + 30000;
+    drawQR(code);
+    clearInterval(cdT); countdown();
+    cdT = setInterval(countdown, 1000);
+  }
+
+  function countdown() {
+    var s = Math.max(0, Math.round((expAt - Date.now()) / 1000));
+    Atlas.el('cd').textContent = '(expires in ' + s + 's)';
+    if (s <= 0) clearInterval(cdT);
+  }
+
+  function drawQR(code) {
+    var box = Atlas.el('qr');
+    if (!window.QRCode) {
+      box.innerHTML = '';
+      Atlas.el('qrFallback').textContent = 'QR library offline (CDN blocked) — type the code above.';
+      return;
+    }
+    Atlas.el('qrFallback').textContent = '';
+    if (!qrObj) { box.innerHTML = ''; qrObj = new QRCode(box, { width: 180, height: 180 }); }
+    qrObj.clear(); qrObj.makeCode(code);
+  }
+
+  async function pollFeed() {
+    if (!sessionId) return;
+    var r = await Atlas.api('GET', '/v1/attendance?session_id=' + sessionId);
+    if (r.status !== 200) return;
+    Atlas.el('feed').innerHTML = r.data.records.map(function (x) {
+      return '<li>student #' + x.student_id + ' — ' + x.status + ' @ ' + x.recorded_at + '</li>';
+    }).join('') || '<li>(no check-ins yet)</li>';
+  }
+})();
+</script>
+</body>
+</html>

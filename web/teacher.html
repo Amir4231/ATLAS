@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas — Teacher</title>
+<link rel="manifest" href="manifest.json">
+<style>
+body{font-family:system-ui,sans-serif;max-width:720px;margin:1rem auto;padding:0 1rem}
+input,button{font-size:1rem;padding:.5rem;margin:.25rem}button{cursor:pointer}
+.msg{margin:.5rem 0}.err{color:#b00}.ok{color:#060}
+.card{border:1px solid #ccc;border-radius:.5rem;padding:.75rem;margin:.5rem 0}
+iframe{width:100%;height:280px;border:1px solid #999}
+.top{display:flex;justify-content:space-between;align-items:baseline}
+.cards{display:flex;gap:.75rem;flex-wrap:wrap}.rate{border:1px solid #999;padding:.5rem 1rem;border-radius:.5rem}
+</style>
+</head>
+<body>
+<div class="top"><h1>Teacher</h1><span><span id="who"></span> <button id="out">Logout</button></span></div>
+
+<h2>Attendance rate</h2>
+<label>Session ID <input id="sess" type="number"></label>
+<button id="rate">Load rate</button>
+<div class="cards" id="rates"></div>
+<p id="m" class="msg"></p>
+
+<h2>Absence queue (pending)</h2>
+<button id="queue">Refresh queue</button>
+<div id="q"></div>
+
+<script src="app.js"></script>
+<script>
+(function () {
+  Atlas.el('out').onclick = Atlas.logout;
+  Atlas.requireRole(['teacher', 'admin']).then(function (me) {
+    if (!me) return;
+    Atlas.el('who').textContent = me.email + ' (' + me.role + ')';
+    loadQueue();
+  });
+
+  Atlas.el('rate').onclick = async function () {
+    var sid = +Atlas.el('sess').value;
+    if (!sid) { Atlas.msg('m', 'Enter a session ID', true); return; }
+    var r = await Atlas.api('GET', '/v1/analytics/class?session_id=' + sid);
+    if (r.status !== 200) { Atlas.msg('m', 'Rate load failed (' + r.status + '): ' + (r.data.error || ''), true); return; }
+    var cats = (r.data.categories || []).map(function (c) { return c.reason + ': ' + c.count; }).join(', ');
+    Atlas.el('rates').innerHTML =
+      '<div class="rate">present <b>' + r.data.rate.present + '</b> / ' + r.data.rate.total +
+      ' (' + r.data.rate.pct + '%)</div>' +
+      '<div class="rate">absence reasons: ' + (cats || 'none') + '</div>';
+  };
+
+  Atlas.el('queue').onclick = loadQueue;
+
+  async function loadQueue() {
+    var r = await Atlas.api('GET', '/v1/absences?status=pending');
+    if (r.status !== 200) { Atlas.msg('m', 'Queue load failed (' + r.status + ')', true); return; }
+    var box = Atlas.el('q');
+    if (!r.data.requests.length) { box.innerHTML = '<p>(queue empty)</p>'; return; }
+    box.innerHTML = '';
+    r.data.requests.forEach(function (x) {
+      var d = document.createElement('div');
+      d.className = 'card';
+      d.innerHTML = '<p><b>#' + x.id + '</b> student #' + x.student_id + ' session #' + x.session_id +
+        ' — ' + x.reason_type + ' (' + x.status + ')</p>';
+      var f = document.createElement('iframe');
+      f.src = x.proof_file_url;
+      f.title = 'proof doc #' + x.id;
+      d.appendChild(f);
+      [['approved', 'Approve'], ['rejected', 'Reject']].forEach(function (pair) {
+        var b = document.createElement('button');
+        b.textContent = pair[1];
+        b.onclick = function () { review(x.id, pair[0]); };
+        d.appendChild(b);
+      });
+      box.appendChild(d);
+    });
+  }
+
+  async function review(id, decision) {
+    var r = await Atlas.api('PATCH', '/v1/absences/' + id + '/review', { decision: decision });
+    Atlas.msg('m', r.status === 200 ? 'Absence #' + id + ' ' + r.data.status : 'Review failed (' + r.status + '): ' + (r.data.error || ''), r.status !== 200);
+    if (r.status === 200) loadQueue();
+  }
+})();
+</script>
+</body>
+</html>

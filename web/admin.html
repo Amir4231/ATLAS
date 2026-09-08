@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas — Admin</title>
+<link rel="manifest" href="manifest.json">
+<style>
+body{font-family:system-ui,sans-serif;max-width:720px;margin:1rem auto;padding:0 1rem}
+input,button{font-size:1rem;padding:.5rem;margin:.25rem 0}button{cursor:pointer}
+.msg{margin:.5rem 0}.err{color:#b00}.ok{color:#060}
+table{border-collapse:collapse;width:100%;font-size:.9rem}td,th{border:1px solid #999;padding:.3rem .5rem;text-align:left}
+.top{display:flex;justify-content:space-between;align-items:baseline}
+label{display:block;margin:.3rem 0}
+</style>
+</head>
+<body>
+<div class="top"><h1>Admin</h1><span><span id="who"></span> <button id="out">Logout</button></span></div>
+
+<h2>College rate</h2>
+<div id="college"></div>
+
+<h2>Create class</h2>
+<form id="cf">
+<label>Name <input id="name" required></label>
+<label>Homeroom teacher ID <input id="tid" type="number" placeholder="(optional)"></label>
+<label>Geofence lat <input id="lat" type="number" step="any" value="3.1390" required></label>
+<label>Geofence lng <input id="lng" type="number" step="any" value="101.6869" required></label>
+<label>Radius (m) <input id="rad" type="number" value="30" required></label>
+<button type="submit">Create</button>
+</form>
+<p id="m" class="msg"></p>
+
+<h2>Classes</h2>
+<ul id="cls"></ul>
+
+<h2>Audit log</h2>
+<button id="audit">Refresh audit</button>
+<table><thead><tr><th>id</th><th>actor</th><th>action</th><th>entity</th><th>entity_id</th><th>at</th></tr></thead>
+<tbody id="logs"></tbody></table>
+
+<script src="app.js"></script>
+<script>
+(function () {
+  Atlas.el('out').onclick = Atlas.logout;
+  Atlas.requireRole(['admin']).then(function (me) {
+    if (!me) return;
+    Atlas.el('who').textContent = me.email;
+    loadCollege(); loadClasses(); loadAudit();
+  });
+
+  async function loadCollege() {
+    var r = await Atlas.api('GET', '/v1/analytics/college');
+    Atlas.el('college').textContent = r.status === 200
+      ? 'present ' + r.data.present + ' / ' + r.data.total + ' (' + r.data.pct + '%)'
+      : 'College analytics failed (' + r.status + ')';
+  }
+
+  document.getElementById('cf').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var body = {
+      class_name: Atlas.el('name').value.trim(),
+      geofence_lat: +Atlas.el('lat').value,
+      geofence_lng: +Atlas.el('lng').value,
+      geofence_radius_m: +Atlas.el('rad').value
+    };
+    if (Atlas.el('tid').value) body.homeroom_teacher_id = +Atlas.el('tid').value;
+    var r = await Atlas.api('POST', '/v1/admin/classes', body);
+    if (r.status !== 200) { Atlas.msg('m', 'Create class failed (' + r.status + '): ' + (r.data.error || ''), true); return; }
+    Atlas.msg('m', 'Class #' + r.data.id + ' created', false);
+    loadClasses();
+  });
+
+  async function loadClasses() {
+    var r = await Atlas.api('GET', '/v1/classes');
+    if (r.status !== 200) return;
+    Atlas.el('cls').innerHTML = r.data.classes.map(function (c) {
+      return '<li>#' + c.id + ' ' + c.class_name + ' @ ' + c.geofence_lat + ',' + c.geofence_lng + ' r=' + c.geofence_radius_m + 'm</li>';
+    }).join('');
+  }
+
+  Atlas.el('audit').onclick = loadAudit;
+  async function loadAudit() {
+    var r = await Atlas.api('GET', '/v1/audit-logs?limit=50');
+    if (r.status !== 200) { Atlas.msg('m', 'Audit load failed (' + r.status + ')', true); return; }
+    Atlas.el('logs').innerHTML = r.data.logs.map(function (l) {
+      return '<tr><td>' + l.id + '</td><td>' + (l.actor_id == null ? '—' : l.actor_id) +
+        '</td><td>' + l.action + '</td><td>' + l.entity + '</td><td>' + l.entity_id +
+        '</td><td>' + l.created_at + '</td></tr>';
+    }).join('');
+  }
+})();
+</script>
+</body>
+</html>

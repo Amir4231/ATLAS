@@ -1,0 +1,9 @@
+{
+  "name": "Atlas Attendance",
+  "short_name": "Atlas",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0b5fff",
+  "description": "Minimal attendance PWA: rep QR, student scan, teacher review, admin classes."
+}

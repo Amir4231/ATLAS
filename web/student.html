@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas — Student</title>
+<link rel="manifest" href="manifest.json">
+<style>
+body{font-family:system-ui,sans-serif;max-width:640px;margin:1rem auto;padding:0 1rem}
+input,select,button{font-size:1rem;padding:.5rem;margin:.25rem 0}button{cursor:pointer}
+.msg{margin:.5rem 0}.err{color:#b00}.ok{color:#060}
+.badge{display:inline-block;padding:.2rem .6rem;border-radius:1rem;background:#eee}
+.badge.lock{background:#cfc}.top{display:flex;justify-content:space-between;align-items:baseline}
+</style>
+</head>
+<body>
+<div class="top"><h1>Student</h1><span><span id="who"></span> <button id="out">Logout</button></span></div>
+
+<h2>Scan attendance</h2>
+<form id="scan">
+<label>Session ID <input id="sess" type="number" required></label><br>
+<label>Code <input id="code" required autocomplete="off"></label><br>
+<label>Lat <input id="lat" type="number" step="any" required></label>
+<label>Lng <input id="lng" type="number" step="any" required></label><br>
+<button type="button" id="gps">Use my location</button>
+<span id="gpsBadge" class="badge">no GPS lock</span><br>
+<button type="submit">Check in</button>
+</form>
+<p id="m" class="msg"></p>
+<h3>My status</h3>
+<ul id="mine"></ul>
+
+<h2>Absence request</h2>
+<form id="abs">
+<label>Session ID <input id="asess" type="number" required></label><br>
+<label>Reason <select id="reason"><option value="sick">sick</option><option value="outreach">outreach</option><option value="personal">personal</option></select></label><br>
+<label>Proof (pdf/jpg/png, max 5MB) <input id="file" type="file" accept=".pdf,.jpg,.jpeg,.png" required></label><br>
+<button type="submit">Upload</button>
+</form>
+<p id="m2" class="msg"></p>
+<h3>My requests</h3>
+<ul id="reqs"></ul>
+
+<script src="app.js"></script>
+<script>
+(function () {
+  Atlas.el('out').onclick = Atlas.logout;
+  Atlas.requireRole(['student']).then(function (me) {
+    if (!me) return;
+    Atlas.el('who').textContent = me.email;
+    loadMine();
+  });
+
+  Atlas.el('gps').onclick = function () {
+    if (!navigator.geolocation) { Atlas.msg('m', 'Geolocation not supported', true); return; }
+    navigator.geolocation.getCurrentPosition(function (p) {
+      Atlas.el('lat').value = p.coords.latitude.toFixed(6);
+      Atlas.el('lng').value = p.coords.longitude.toFixed(6);
+      var b = Atlas.el('gpsBadge');
+      b.textContent = 'GPS lock ±' + Math.round(p.coords.accuracy) + ' m';
+      b.className = 'badge lock';
+    }, function (e) { Atlas.msg('m', 'Geolocation denied: ' + e.message, true); });
+  };
+
+  document.getElementById('scan').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var r = await Atlas.api('POST', '/v1/attendance/scan', {
+      session_id: +Atlas.el('sess').value, code: Atlas.el('code').value.trim(),
+      lat: +Atlas.el('lat').value, lng: +Atlas.el('lng').value
+    });
+    if (r.status !== 200) { Atlas.msg('m', Atlas.scanError(r.status, r.data), true); return; }
+    Atlas.msg('m', 'Checked in: ' + r.data.status + ' (' + (r.data.distance_m || 0) + ' m)', false);
+    loadMine();
+  });
+
+  async function loadMine() {
+    var sid = +Atlas.el('sess').value;
+    if (!sid) { Atlas.el('mine').innerHTML = '<li>enter a session ID above, then check in</li>'; return; }
+    var r = await Atlas.api('GET', '/v1/attendance?session_id=' + sid);
+    if (r.status !== 200) return;
+    Atlas.el('mine').innerHTML = r.data.records.map(function (x) {
+      return '<li>#' + x.student_id + ' — ' + x.status + ' @ ' + x.recorded_at + '</li>';
+    }).join('') || '<li>(no record)</li>';
+  }
+  Atlas.el('sess').addEventListener('change', loadMine);
+
+  document.getElementById('abs').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var fd = new FormData();
+    fd.append('session_id', Atlas.el('asess').value);
+    fd.append('reason_type', Atlas.el('reason').value);
+    fd.append('file', Atlas.el('file').files[0]);
+    var r = await Atlas.api('POST', '/v1/absences', fd);
+    if (r.status !== 200) { Atlas.msg('m2', Atlas.uploadError(r.status, r.data), true); return; }
+    Atlas.msg('m2', 'Absence #' + r.data.id + ' submitted', false);
+    loadReqs();
+  });
+
+  async function loadReqs() {
+    var r = await Atlas.api('GET', '/v1/absences');
+    if (r.status !== 200) return;
+    Atlas.el('reqs').innerHTML = r.data.requests.map(function (x) {
+      return '<li>#' + x.id + ' session #' + x.session_id + ' ' + x.reason_type + ' — ' + x.status + '</li>';
+    }).join('') || '<li>(none)</li>';
+  }
+  loadReqs();
+})();
+</script>
+</body>
+</html>
