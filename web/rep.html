@@ -135,6 +135,7 @@
     Atlas.el('cd').className = 'qr-hero__timer';
     Atlas.el('shareHint').textContent = '';
     Atlas.el('qrSection').style.display = 'none';
+    Atlas.el('feedSection').style.display = 'none';
     sessionId = 0;
   };
 
@@ -218,7 +219,7 @@
     var r = await Atlas.api('GET', '/v1/attendance?session_id=' + sessionId);
     if (r.status !== 200) return;
     var list = Atlas.el('feed');
-    list.innerHTML = r.data.records.map(function (x) {
+    list.innerHTML = (r.data.records || []).map(function (x) {
       var sc = x.status === 'present' ? 'badge--green' : x.status === 'absent' ? 'badge--red' : 'badge--yellow';
       return '<li>' +
         '<span class="text-muted text-xs" style="min-width:80px">Student #' + x.student_id + '</span>' +
