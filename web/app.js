@@ -112,10 +112,36 @@
     return 'Upload failed (' + status + '): ' + (data.error || 'request failed');
   }
 
+  function parseQRPayload(text) {
+    var raw = (text || '').trim();
+    if (!raw) return { sessionId: 0, code: '' };
+    try {
+      var o = JSON.parse(raw);
+      var sid = o.s != null ? +o.s : o.session_id != null ? +o.session_id : 0;
+      var code = o.c != null ? String(o.c).trim() : o.code != null ? String(o.code).trim() : '';
+      if (code || sid) return { sessionId: sid || 0, code: code || '' };
+    } catch (e) {}
+    return { sessionId: 0, code: raw };
+  }
+
+  function joinLink(sessionId) {
+    var base = location.href.split('?')[0].split('#')[0];
+    var dir = base.slice(0, base.lastIndexOf('/') + 1);
+    return dir + 'student.html?session=' + encodeURIComponent(sessionId);
+  }
+
+  function sessionFromQuery() {
+    try {
+      var q = new URLSearchParams(location.search);
+      return +(q.get('session') || q.get('session_id')) || 0;
+    } catch (e) { return 0; }
+  }
+
   window.Atlas = {
     api: api, login: login, logout: logout,
     getToken: getToken, setToken: setToken,
     roleHome: roleHome, requireRole: requireRole,
-    el: el, msg: msg, scanError: scanError, uploadError: uploadError
+    el: el, msg: msg, scanError: scanError, uploadError: uploadError,
+    parseQRPayload: parseQRPayload, joinLink: joinLink, sessionFromQuery: sessionFromQuery
   };
 })();
