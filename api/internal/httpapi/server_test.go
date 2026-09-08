@@ -283,3 +283,38 @@ func TestMeReturnsRow(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestTeacherCanOpenQRSessionGate(t *testing.T) {
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	srv := newTestServer(db, attend.NewMemLimiter(10, time.Minute))
+	h := srv.Routes()
+
+	mkToken := func(role string) string {
+		tok, err := auth.Token("11", role, testSecret)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tok
+	}
+
+	tr := httptest.NewRequest("POST", "/v1/qr/session", strings.NewReader(`{}`))
+	tr.Header.Set("Authorization", "Bearer "+mkToken("teacher"))
+	trRec := httptest.NewRecorder()
+	h.ServeHTTP(trRec, tr)
+	if trRec.Code == http.StatusForbidden {
+		t.Fatalf("teacher open session: expected pass-through (400/200), got 403 %s", trRec.Body.String())
+	}
+
+	sr := httptest.NewRequest("POST", "/v1/qr/session", strings.NewReader(`{}`))
+	sr.Header.Set("Authorization", "Bearer "+mkToken("student"))
+	srRec := httptest.NewRecorder()
+	h.ServeHTTP(srRec, sr)
+	if srRec.Code != http.StatusForbidden {
+		t.Fatalf("student open session: expected 403, got %d %s", srRec.Code, srRec.Body.String())
+	}
+}

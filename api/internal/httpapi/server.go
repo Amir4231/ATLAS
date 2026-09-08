@@ -62,10 +62,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/auth/login", s.handleLogin)
 
 	mux.Handle("GET /v1/me", s.prot(s.handleMe))
-	mux.Handle("POST /v1/qr/session", s.prot(s.handleOpenSession, "class_rep", "rep", "admin"))
-	mux.Handle("GET /v1/qr/session/{id}/code", s.prot(s.handleGetCode, "class_rep", "rep", "admin"))
+	mux.Handle("POST /v1/qr/session", s.prot(s.handleOpenSession, "class_rep", "rep", "admin", "teacher"))
+	mux.Handle("GET /v1/qr/session/{id}/code", s.prot(s.handleGetCode, "class_rep", "rep", "admin", "teacher"))
 	mux.Handle("POST /v1/attendance/scan", s.prot(s.handleScan, "student"))
-	mux.Handle("POST /v1/qr/session/{id}/close", s.prot(s.handleCloseSession, "class_rep", "rep", "admin"))
+	mux.Handle("POST /v1/qr/session/{id}/close", s.prot(s.handleCloseSession, "class_rep", "rep", "admin", "teacher"))
 	mux.Handle("GET /v1/attendance", s.prot(s.handleAttendanceList))
 	mux.Handle("POST /v1/absences", s.prot(s.handleAbsenceSubmit, "student"))
 	mux.Handle("GET /v1/absences", s.prot(s.handleAbsenceList, "teacher", "admin", "student"))
