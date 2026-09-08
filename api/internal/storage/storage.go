@@ -61,7 +61,7 @@ func (l LocalStorage) Save(filename string, data []byte) (string, error) {
 		return "", err
 	}
 	name := hex.EncodeToString(prefix[:]) + "-" + filename
-	if err := os.WriteFile(filepath.Join(l.Dir, name), data, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(l.Dir, name), data, 0o644); err != nil {
 		return "", err
 	}
 	return strings.TrimSuffix(l.BaseURL, "/") + "/" + name, nil
