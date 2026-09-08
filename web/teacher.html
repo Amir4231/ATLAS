@@ -5,83 +5,359 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Atlas — Teacher</title>
 <link rel="manifest" href="manifest.json">
-<style>
-body{font-family:system-ui,sans-serif;max-width:720px;margin:1rem auto;padding:0 1rem}
-input,button{font-size:1rem;padding:.5rem;margin:.25rem}button{cursor:pointer}
-.msg{margin:.5rem 0}.err{color:#b00}.ok{color:#060}
-.card{border:1px solid #ccc;border-radius:.5rem;padding:.75rem;margin:.5rem 0}
-iframe{width:100%;height:280px;border:1px solid #999}
-.top{display:flex;justify-content:space-between;align-items:baseline}
-.cards{display:flex;gap:.75rem;flex-wrap:wrap}.rate{border:1px solid #999;padding:.5rem 1rem;border-radius:.5rem}
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="top"><h1>Teacher</h1><span><span id="who"></span> <button id="out">Logout</button></span></div>
 
-<h2>Attendance rate</h2>
-<label>Session ID <input id="sess" type="number"></label>
-<button id="rate">Load rate</button>
-<div class="cards" id="rates"></div>
-<p id="m" class="msg"></p>
+<nav class="topbar">
+  <a href="index.html" class="topbar__brand">
+    <div class="topbar__brand-icon">A</div>
+    Atlas
+  </a>
+  <div class="topbar__user">
+    <span class="topbar__email" id="who"></span>
+    <button class="btn btn--ghost btn--sm" id="out">Sign out</button>
+  </div>
+</nav>
 
-<h2>Absence queue (pending)</h2>
-<button id="queue">Refresh queue</button>
-<div id="q"></div>
+<div class="page-wrap">
+  <div class="page-header">
+    <h1>Teacher</h1>
+    <p>Review session attendance rates and approve absence requests.</p>
+  </div>
 
+  <!-- Session control -->
+  <section>
+    <div class="section-title">
+      <div class="section-title__icon">🎓</div>
+      <h2>Session control</h2>
+    </div>
+    <div class="field">
+      <label for="cls">Class</label>
+      <select id="cls"></select>
+    </div>
+    <div class="btn-row">
+      <button id="open" class="btn btn--primary">Open session</button>
+      <button id="close" class="btn btn--danger" disabled>Close session</button>
+    </div>
+    <div id="m0" class="msg"></div>
+  </section>
+
+  <!-- QR hero — hidden until session is open -->
+  <div id="qrSection" style="display:none">
+    <div class="qr-hero">
+      <div style="display:flex;align-items:center;gap:.5rem">
+        <span class="pulse"></span>
+        <span id="sessLabel" class="qr-hero__session font-semibold">Session active</span>
+      </div>
+
+      <div class="qr-hero__qr-wrap" id="qr"></div>
+      <p id="qrFallback" style="color:var(--danger);font-size:.8125rem;margin:0"></p>
+
+      <div class="qr-hero__code" id="code">—</div>
+      <div class="btn-row" style="justify-content:center">
+        <button id="copyCode" class="btn btn--ghost btn--sm" type="button">Copy code</button>
+        <button id="copyLink" class="btn btn--ghost btn--sm" type="button">Copy join link</button>
+      </div>
+      <p id="shareHint" class="text-subtle text-xs" style="margin:0;word-break:break-all"></p>
+      <div class="qr-hero__timer" id="cd">Waiting…</div>
+    </div>
+  </div>
+
+  <!-- Live feed — hidden until session is open -->
+  <section id="feedSection" style="display:none">
+    <div class="section-title">
+      <div class="section-title__icon">👥</div>
+      <h2>Live check-ins</h2>
+    </div>
+    <ul id="feed" class="item-list">
+      <li><span class="empty" style="padding:1.25rem 0;display:block">Waiting for check-ins…</span></li>
+    </ul>
+  </section>
+
+  <!-- Attendance rate -->
+  <section>
+    <div class="section-title">
+      <div class="section-title__icon">📊</div>
+      <h2>Session attendance rate</h2>
+    </div>
+
+    <div class="flex gap-2 items-center flex-wrap">
+      <div class="field flex-1" style="min-width:140px;margin:0">
+        <label for="sess">Session ID</label>
+        <input id="sess" type="number" placeholder="e.g. 42">
+      </div>
+      <div style="padding-top:1.35rem">
+        <button id="rate" class="btn btn--secondary">Load</button>
+      </div>
+    </div>
+
+    <div id="m" class="msg"></div>
+    <div id="rates" class="stats mt-2" style="display:none"></div>
+  </section>
+
+  <!-- Absence queue -->
+  <section>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.1rem;padding-bottom:.875rem;border-bottom:1px solid var(--border)">
+      <div class="flex items-center gap-2">
+        <div class="section-title__icon" style="width:28px;height:28px;border-radius:6px;background:var(--accent-faint);display:flex;align-items:center;justify-content:center;font-size:.875rem">📩</div>
+        <span style="font-size:.9375rem;font-weight:700;letter-spacing:-.01em">Pending absence requests</span>
+      </div>
+      <button id="queue" class="btn btn--secondary btn--sm">Refresh</button>
+    </div>
+    <div id="q">
+      <p class="empty">No pending requests at the moment.</p>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="app.js"></script>
 <script>
 (function () {
+  var sessionId = 0, pollT = null, cdT = null, expAt = 0, qrObj = null;
+
   Atlas.el('out').onclick = Atlas.logout;
+
   Atlas.requireRole(['teacher', 'admin']).then(function (me) {
     if (!me) return;
     Atlas.el('who').textContent = me.email + ' (' + me.role + ')';
     loadQueue();
+    loadClassOptions();
   });
 
   Atlas.el('rate').onclick = async function () {
     var sid = +Atlas.el('sess').value;
-    if (!sid) { Atlas.msg('m', 'Enter a session ID', true); return; }
+    if (!sid) { Atlas.msg('m', 'Enter a session ID first.', true); return; }
+    var btn = Atlas.el('rate');
+    btn.classList.add('loading'); btn.disabled = true;
     var r = await Atlas.api('GET', '/v1/analytics/class?session_id=' + sid);
-    if (r.status !== 200) { Atlas.msg('m', 'Rate load failed (' + r.status + '): ' + (r.data.error || ''), true); return; }
-    var cats = (r.data.categories || []).map(function (c) { return c.reason + ': ' + c.count; }).join(', ');
-    Atlas.el('rates').innerHTML =
-      '<div class="rate">present <b>' + r.data.rate.present + '</b> / ' + r.data.rate.total +
-      ' (' + r.data.rate.pct + '%)</div>' +
-      '<div class="rate">absence reasons: ' + (cats || 'none') + '</div>';
+    btn.classList.remove('loading'); btn.disabled = false;
+    if (r.status !== 200) { Atlas.msg('m', 'Could not load rate (' + r.status + ').', true); return; }
+    Atlas.msg('m', '', false);
+
+    var box = Atlas.el('rates');
+    box.style.display = '';
+    var pct = r.data.rate.pct || 0;
+    var pctClass = pct >= 75 ? 'badge--green' : pct >= 50 ? 'badge--yellow' : 'badge--red';
+    var cats = (r.data.categories || []).map(function (c) {
+      return '<div class="stat">' +
+        '<div class="stat__label">' + cap(c.reason) + '</div>' +
+        '<div class="stat__value">' + c.count + '</div>' +
+        '<div class="stat__sub">absences</div></div>';
+    }).join('');
+
+    box.innerHTML =
+      '<div class="stat">' +
+        '<div class="stat__label">Present</div>' +
+        '<div class="stat__value">' + r.data.rate.present + ' / ' + r.data.rate.total + '</div>' +
+        '<div class="stat__sub"><span class="badge ' + pctClass + '">' + pct + '%</span></div>' +
+      '</div>' +
+      (cats || '<div class="stat"><div class="stat__label">Absences</div><div class="stat__value">—</div><div class="stat__sub">none logged</div></div>');
   };
 
   Atlas.el('queue').onclick = loadQueue;
 
   async function loadQueue() {
+    var btn = Atlas.el('queue');
+    btn.classList.add('loading'); btn.disabled = true;
     var r = await Atlas.api('GET', '/v1/absences?status=pending');
-    if (r.status !== 200) { Atlas.msg('m', 'Queue load failed (' + r.status + ')', true); return; }
+    btn.classList.remove('loading'); btn.disabled = false;
+    if (r.status !== 200) { Atlas.msg('m', 'Queue load failed (' + r.status + ').', true); return; }
+
     var box = Atlas.el('q');
-    if (!r.data.requests.length) { box.innerHTML = '<p>(queue empty)</p>'; return; }
+    if (!r.data.requests.length) {
+      box.innerHTML = '<p class="empty">No pending requests at the moment.</p>';
+      return;
+    }
+
     box.innerHTML = '';
     r.data.requests.forEach(function (x) {
-      var d = document.createElement('div');
-      d.className = 'card';
-      d.innerHTML = '<p><b>#' + x.id + '</b> student #' + x.student_id + ' session #' + x.session_id +
-        ' — ' + x.reason_type + ' (' + x.status + ')</p>';
-      var f = document.createElement('iframe');
-      f.src = x.proof_file_url;
-      f.title = 'proof doc #' + x.id;
-      d.appendChild(f);
-      [['approved', 'Approve'], ['rejected', 'Reject']].forEach(function (pair) {
+      var card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML =
+        '<div class="card__meta">Request #' + x.id +
+          ' &nbsp;·&nbsp; Student #' + x.student_id +
+          ' &nbsp;·&nbsp; Session #' + x.session_id + '</div>' +
+        '<div class="card__title">' +
+          cap(x.reason_type) +
+          ' <span class="badge badge--yellow">' + x.status + '</span>' +
+        '</div>' +
+        '<iframe class="proof-frame" src="' + x.proof_file_url + '" title="Proof document for request #' + x.id + '"></iframe>' +
+        '<div class="btn-row" style="margin-top:.5rem"></div>';
+
+      var row = card.querySelector('.btn-row');
+      [['approved', 'Approve', 'btn--primary'], ['rejected', 'Reject', 'btn--danger']].forEach(function (pair) {
         var b = document.createElement('button');
         b.textContent = pair[1];
-        b.onclick = function () { review(x.id, pair[0]); };
-        d.appendChild(b);
+        b.className = 'btn btn--sm ' + pair[2];
+        b.onclick = function () { review(x.id, pair[0], b, card); };
+        row.appendChild(b);
       });
-      box.appendChild(d);
+
+      box.appendChild(card);
     });
   }
 
-  async function review(id, decision) {
+  async function review(id, decision, btn, card) {
+    btn.classList.add('loading'); btn.disabled = true;
     var r = await Atlas.api('PATCH', '/v1/absences/' + id + '/review', { decision: decision });
-    Atlas.msg('m', r.status === 200 ? 'Absence #' + id + ' ' + r.data.status : 'Review failed (' + r.status + '): ' + (r.data.error || ''), r.status !== 200);
-    if (r.status === 200) loadQueue();
+    if (r.status === 200) {
+      Atlas.msg('m', 'Request #' + id + ' marked as ' + r.data.status + '.', false);
+      card.style.opacity = '.4';
+      card.style.pointerEvents = 'none';
+      setTimeout(loadQueue, 900);
+    } else {
+      Atlas.msg('m', 'Review failed (' + r.status + '): ' + (r.data.error || ''), true);
+      btn.classList.remove('loading'); btn.disabled = false;
+    }
   }
+
+  async function loadClassOptions() {
+    var r = await Atlas.api('GET', '/v1/classes');
+    if (r.status !== 200) { Atlas.msg('m0', 'Could not load classes (' + r.status + ').', true); return; }
+    Atlas.el('cls').innerHTML = r.data.classes.map(function (c) {
+      return '<option value="' + c.id + '">' + c.class_name + ' (#' + c.id + ')</option>';
+    }).join('');
+  }
+
+  Atlas.el('open').onclick = async function () {
+    var btn = Atlas.el('open');
+    btn.classList.add('loading'); btn.disabled = true;
+    var r = await Atlas.api('POST', '/v1/qr/session', { class_id: +Atlas.el('cls').value });
+    btn.classList.remove('loading'); btn.disabled = false;
+    if (r.status !== 200) { Atlas.msg('m0', 'Failed to open session (' + r.status + '): ' + (r.data.error || ''), true); return; }
+
+    sessionId = r.data.session_id || r.data.id;
+    Atlas.el('sessLabel').textContent = 'Session #' + sessionId + ' · live';
+    Atlas.el('close').disabled = false;
+    Atlas.el('qrSection').style.display = '';
+    Atlas.el('feedSection').style.display = '';
+    Atlas.msg('m0', 'Session #' + sessionId + ' is open. Share the QR or code below.', false);
+    tickQR(); pollFeed();
+    clearInterval(pollT);
+    pollT = setInterval(function () { tickQR(); pollFeed(); }, 5000);
+  };
+
+  Atlas.el('close').onclick = async function () {
+    if (!sessionId) return;
+    var btn = Atlas.el('close');
+    btn.classList.add('loading'); btn.disabled = true;
+    var r = await Atlas.api('POST', '/v1/qr/session/' + sessionId + '/close', {});
+    btn.classList.remove('loading');
+    clearInterval(pollT); clearInterval(cdT);
+
+    if (r.status === 200) {
+      Atlas.msg('m0', 'Session closed — ' + (r.data.marked || 0) + ' student(s) marked present.', false);
+    } else {
+      Atlas.msg('m0', 'Close failed (' + r.status + ').', true);
+      btn.disabled = false;
+    }
+    Atlas.el('code').textContent = '—';
+    Atlas.el('cd').textContent = '';
+    Atlas.el('cd').className = 'qr-hero__timer';
+    Atlas.el('shareHint').textContent = '';
+    Atlas.el('qrSection').style.display = 'none';
+    sessionId = 0;
+  };
+
+  async function tickQR() {
+    if (!sessionId) return;
+    var r = await Atlas.api('GET', '/v1/qr/session/' + sessionId + '/code');
+    if (r.status !== 200) {
+      Atlas.msg('m0', 'Code refresh failed (' + r.status + ').', true);
+      if (r.status === 410) clearInterval(pollT);
+      return;
+    }
+    var code = r.data.code;
+    var exp  = r.data.exp != null ? r.data.exp : r.data.expires_at;
+    Atlas.el('code').textContent = code;
+    Atlas.el('shareHint').textContent = 'Join link: ' + Atlas.joinLink(sessionId);
+    expAt = (typeof exp === 'number') ? exp * 1000 : Date.parse(exp);
+    if (!expAt) expAt = Date.now() + 30000;
+    drawQR(sessionId, code);
+    clearInterval(cdT);
+    countdownQR();
+    cdT = setInterval(countdownQR, 1000);
+  }
+
+  function countdownQR() {
+    var s = Math.max(0, Math.round((expAt - Date.now()) / 1000));
+    var el = Atlas.el('cd');
+    el.textContent = '⏱ Refreshes in ' + s + 's';
+    el.className = 'qr-hero__timer' + (s <= 8 ? ' urgent' : '');
+    if (s <= 0) clearInterval(cdT);
+  }
+
+  function drawQR(sid, code) {
+    var box = Atlas.el('qr');
+    if (!window.QRCode) {
+      box.innerHTML = '';
+      Atlas.el('qrFallback').textContent = 'QR unavailable (CDN blocked) — students can type the code above.';
+      return;
+    }
+    Atlas.el('qrFallback').textContent = '';
+    if (!qrObj) { box.innerHTML = ''; qrObj = new QRCode(box, { width: 200, height: 200 }); }
+    qrObj.clear();
+    qrObj.makeCode(JSON.stringify({ s: sid, c: code }));
+  }
+
+  function fallbackCopy(text, okMsg) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    try { ta.select(); document.execCommand('copy'); Atlas.msg('m0', okMsg, false); }
+    catch (e) { Atlas.msg('m0', 'Copy failed — select and copy manually.', true); }
+    document.body.removeChild(ta);
+  }
+
+  function copyText(text, okMsg) {
+    if (!text) { Atlas.msg('m0', 'Nothing to copy yet — open a session first.', true); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { Atlas.msg('m0', okMsg, false); },
+        function () { fallbackCopy(text, okMsg); }
+      );
+    } else {
+      fallbackCopy(text, okMsg);
+    }
+  }
+
+  Atlas.el('copyCode').onclick = function () {
+    var code = Atlas.el('code').textContent;
+    if (!code || code === '—') { Atlas.msg('m0', 'Nothing to copy yet — open a session first.', true); return; }
+    copyText(code, 'Code copied.');
+  };
+
+  Atlas.el('copyLink').onclick = function () {
+    if (!sessionId) { Atlas.msg('m0', 'Nothing to copy yet — open a session first.', true); return; }
+    copyText(Atlas.joinLink(sessionId), 'Join link copied.');
+  };
+
+  async function pollFeed() {
+    if (!sessionId) return;
+    var r = await Atlas.api('GET', '/v1/attendance?session_id=' + sessionId);
+    if (r.status !== 200) return;
+    var list = Atlas.el('feed');
+    list.innerHTML = r.data.records.map(function (x) {
+      var sc = x.status === 'present' ? 'badge--green' : x.status === 'absent' ? 'badge--red' : 'badge--yellow';
+      return '<li>' +
+        '<span class="text-muted text-xs" style="min-width:80px">Student #' + x.student_id + '</span>' +
+        '<span class="badge ' + sc + '">' + x.status + '</span>' +
+        '<span class="text-subtle text-xs ml-auto">' + fmtTime(x.recorded_at) + '</span>' +
+        '</li>';
+    }).join('') || '<li><span class="empty" style="padding:1.25rem 0;display:block">No check-ins yet.</span></li>';
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return '';
+    try { return new Date(iso).toLocaleTimeString([], { timeStyle: 'short' }); }
+    catch (e) { return iso; }
+  }
+
+  function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 })();
 </script>
 </body>
