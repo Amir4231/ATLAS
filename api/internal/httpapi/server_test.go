@@ -220,6 +220,36 @@ func TestRoleGateAndAuth(t *testing.T) {
 	}
 }
 
+func TestAbsenceListGate(t *testing.T) {
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	srv := newTestServer(db, attend.NewMemLimiter(10, time.Minute))
+	h := srv.Routes()
+
+	mkToken := func(role string) string {
+		tok, err := auth.Token("9", role, testSecret)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tok
+	}
+
+	rep := httptest.NewRequest("GET", "/v1/absences", nil)
+	rep.Header.Set("Authorization", "Bearer "+mkToken("class_rep"))
+	repRec := httptest.NewRecorder()
+	h.ServeHTTP(repRec, rep)
+	if repRec.Code != http.StatusForbidden {
+		t.Fatalf("class_rep absence list: expected 403, got %d body %s", repRec.Code, repRec.Body.String())
+	}
+	if !strings.Contains(repRec.Body.String(), "FORBIDDEN") {
+		t.Fatalf("expected FORBIDDEN, got %s", repRec.Body.String())
+	}
+}
+
 func TestMeReturnsRow(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
