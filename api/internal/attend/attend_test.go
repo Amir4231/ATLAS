@@ -159,3 +159,31 @@ func TestCodeBoundary(t *testing.T) {
 		t.Fatalf("expected exp 10, got %d", exp)
 	}
 }
+func TestSessionSecret(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	want := fixedSecret()
+	mock.ExpectQuery("SELECT totp_secret FROM qr_sessions").WithArgs(4).
+		WillReturnRows(sqlmock.NewRows([]string{"totp_secret"}).AddRow(want))
+	got, err := SessionSecret(db, 4)
+	if err != nil {
+		t.Fatalf("SessionSecret: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("expected %x, got %x", want, got)
+	}
+
+	mock.ExpectQuery("SELECT totp_secret FROM qr_sessions").WithArgs(99).
+		WillReturnRows(sqlmock.NewRows([]string{"totp_secret"}))
+	if _, err := SessionSecret(db, 99); !errors.Is(err, ErrSessionClosed) {
+		t.Fatalf("expected ErrSessionClosed, got %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

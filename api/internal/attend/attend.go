@@ -97,6 +97,21 @@ func Code(secret []byte, t time.Time) (code string, exp int64) {
 	return totp.Generate(secret, t), (t.Unix()/5 + 1) * 5
 }
 
+func SessionSecret(db *sql.DB, sessionID int) ([]byte, error) {
+	var secret []byte
+	err := db.QueryRow(
+		`SELECT totp_secret FROM qr_sessions WHERE id=$1`,
+		sessionID,
+	).Scan(&secret)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrSessionClosed
+		}
+		return nil, err
+	}
+	return secret, nil
+}
+
 func Scan(db *sql.DB, lim Limiter, ip string, sessionID int, studentID int, code string, lat, lng float64, t time.Time) (status string, distM float64, err error) {
 	ok, err := lim.Allow("scan:" + ip)
 	if err != nil {
