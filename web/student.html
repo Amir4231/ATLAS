@@ -5,105 +5,393 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Atlas — Student</title>
 <link rel="manifest" href="manifest.json">
-<style>
-body{font-family:system-ui,sans-serif;max-width:640px;margin:1rem auto;padding:0 1rem}
-input,select,button{font-size:1rem;padding:.5rem;margin:.25rem 0}button{cursor:pointer}
-.msg{margin:.5rem 0}.err{color:#b00}.ok{color:#060}
-.badge{display:inline-block;padding:.2rem .6rem;border-radius:1rem;background:#eee}
-.badge.lock{background:#cfc}.top{display:flex;justify-content:space-between;align-items:baseline}
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="top"><h1>Student</h1><span><span id="who"></span> <button id="out">Logout</button></span></div>
 
-<h2>Scan attendance</h2>
-<form id="scan">
-<label>Session ID <input id="sess" type="number" required></label><br>
-<label>Code <input id="code" required autocomplete="off"></label><br>
-<label>Lat <input id="lat" type="number" step="any" required></label>
-<label>Lng <input id="lng" type="number" step="any" required></label><br>
-<button type="button" id="gps">Use my location</button>
-<span id="gpsBadge" class="badge">no GPS lock</span><br>
-<button type="submit">Check in</button>
-</form>
-<p id="m" class="msg"></p>
-<h3>My status</h3>
-<ul id="mine"></ul>
+<nav class="topbar">
+  <a href="index.html" class="topbar__brand">
+    <div class="topbar__brand-icon">A</div>
+    Atlas
+  </a>
+  <div class="topbar__user">
+    <span class="topbar__email" id="who"></span>
+    <button class="btn btn--ghost btn--sm" id="out">Sign out</button>
+  </div>
+</nav>
 
-<h2>Absence request</h2>
-<form id="abs">
-<label>Session ID <input id="asess" type="number" required></label><br>
-<label>Reason <select id="reason"><option value="sick">sick</option><option value="outreach">outreach</option><option value="personal">personal</option></select></label><br>
-<label>Proof (pdf/jpg/png, max 5MB) <input id="file" type="file" accept=".pdf,.jpg,.jpeg,.png" required></label><br>
-<button type="submit">Upload</button>
-</form>
-<p id="m2" class="msg"></p>
-<h3>My requests</h3>
-<ul id="reqs"></ul>
+<div class="page-wrap">
+  <div class="page-header">
+    <h1>Student</h1>
+    <p>Check in to sessions and submit absence requests.</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="checkin">Check in</button>
+    <button class="tab-btn" data-tab="absence">Absence request</button>
+  </div>
+
+  <!-- ── CHECK-IN TAB ─────────────────────────────────── -->
+  <div class="tab-panel active" id="tab-checkin">
+
+    <section>
+      <div class="section-title">
+        <div class="section-title__icon">📍</div>
+        <h2>Scan attendance</h2>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap" style="margin-bottom:.6rem">
+        <button type="button" id="scanBtn" class="btn btn--secondary btn--sm">📷 Scan QR</button>
+        <button type="button" id="stopBtn" class="btn btn--ghost btn--sm" hidden>Stop</button>
+        <span id="scanStatus" class="text-muted text-sm"></span>
+      </div>
+      <video id="cam" playsinline muted hidden style="width:100%;max-height:240px;border-radius:8px;background:#000"></video>
+      <canvas id="frame" hidden></canvas>
+      <div class="field-hint" style="margin-bottom:.6rem">Scan the class QR, or type Session + Code manually.</div>
+
+      <form id="scan">
+        <div class="field-row">
+          <div class="field">
+            <label for="sess">Session ID</label>
+            <input id="sess" type="number" required placeholder="e.g. 42">
+          </div>
+          <div class="field">
+            <label for="code">Attendance code</label>
+            <input id="code" required autocomplete="off" placeholder="From class rep">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Location</label>
+          <div class="flex items-center gap-2 flex-wrap" style="margin-bottom:.6rem">
+            <button type="button" id="gps" class="btn btn--secondary btn--sm">⊕ Use my location</button>
+            <span id="gpsBadge" class="gps-badge">● No GPS lock</span>
+          </div>
+          <div class="field-row" style="margin-top:0">
+            <div class="field" style="margin:0">
+              <label for="lat">Latitude</label>
+              <input id="lat" type="number" step="any" required placeholder="0.000000">
+            </div>
+            <div class="field" style="margin:0">
+              <label for="lng">Longitude</label>
+              <input id="lng" type="number" step="any" required placeholder="0.000000">
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button type="submit" id="checkInBtn" class="btn btn--primary">Check in</button>
+        </div>
+      </form>
+
+      <div id="m" class="msg"></div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <div class="section-title__icon">📋</div>
+        <h2>My attendance status</h2>
+      </div>
+      <ul id="mine" class="item-list">
+        <li><span class="empty" style="padding:1.25rem 0;display:block">Enter a session ID and check in above.</span></li>
+      </ul>
+    </section>
+
+  </div><!-- /tab-checkin -->
+
+  <!-- ── ABSENCE TAB ──────────────────────────────────── -->
+  <div class="tab-panel" id="tab-absence">
+
+    <section>
+      <div class="section-title">
+        <div class="section-title__icon">📎</div>
+        <h2>Submit absence request</h2>
+      </div>
+
+      <form id="abs">
+        <div class="field-row">
+          <div class="field">
+            <label for="asess">Session ID</label>
+            <input id="asess" type="number" required placeholder="e.g. 42">
+          </div>
+          <div class="field">
+            <label for="reason">Reason</label>
+            <select id="reason">
+              <option value="sick">Sick</option>
+              <option value="outreach">Outreach</option>
+              <option value="personal">Personal</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="file">Supporting document</label>
+          <input id="file" type="file" accept=".pdf,.jpg,.jpeg,.png" required>
+          <div class="field-hint">PDF, JPG or PNG · max 5 MB</div>
+        </div>
+        <div class="btn-row">
+          <button type="submit" id="absBtn" class="btn btn--primary">Submit request</button>
+        </div>
+      </form>
+
+      <div id="m2" class="msg"></div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <div class="section-title__icon">🗂</div>
+        <h2>My requests</h2>
+      </div>
+      <ul id="reqs" class="item-list">
+        <li><span class="empty" style="padding:1.25rem 0;display:block">No requests submitted yet.</span></li>
+      </ul>
+    </section>
+
+  </div><!-- /tab-absence -->
+</div><!-- /page-wrap -->
 
 <script src="app.js"></script>
 <script>
 (function () {
+  /* tabs */
+  document.querySelectorAll('.tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
   Atlas.el('out').onclick = Atlas.logout;
+
   Atlas.requireRole(['student']).then(function (me) {
     if (!me) return;
     Atlas.el('who').textContent = me.email;
     loadMine();
+    loadReqs();
   });
 
-  Atlas.el('gps').onclick = function () {
-    if (!navigator.geolocation) { Atlas.msg('m', 'Geolocation not supported', true); return; }
+  /* join-link boot + auto-GPS + camera scan */
+  (function bootFromQuery() {
+    var sid = 0;
+    try { sid = Atlas.sessionFromQuery(); } catch (e) { sid = 0; }
+    if (sid) {
+      Atlas.el('sess').value = sid;
+      Atlas.el('asess').value = sid;
+      Atlas.msg('m', 'Joined session ' + sid + ' via link — confirm GPS, then Check in.', false);
+    }
+    autoGPS(true);
+  })();
+
+  function autoGPS(silent) {
+    if (!navigator.geolocation) {
+      if (!silent) Atlas.msg('m', 'Geolocation is not supported by this browser.', true);
+      return;
+    }
     navigator.geolocation.getCurrentPosition(function (p) {
       Atlas.el('lat').value = p.coords.latitude.toFixed(6);
       Atlas.el('lng').value = p.coords.longitude.toFixed(6);
       var b = Atlas.el('gpsBadge');
-      b.textContent = 'GPS lock ±' + Math.round(p.coords.accuracy) + ' m';
-      b.className = 'badge lock';
-    }, function (e) { Atlas.msg('m', 'Geolocation denied: ' + e.message, true); });
+      b.textContent = '✓ GPS lock ±' + Math.round(p.coords.accuracy) + ' m';
+      b.className = 'gps-badge locked';
+    }, function (e) {
+      if (!silent) Atlas.msg('m', 'Location denied: ' + e.message, true);
+    });
+  }
+
+  var scanStream = null, scanning = false, scanRaf = 0, scanDetector = null, jsqrLoading = null;
+
+  Atlas.el('scanBtn').onclick = startScan;
+  Atlas.el('stopBtn').onclick = stopScan;
+  window.addEventListener('pagehide', stopScan);
+
+  async function startScan() {
+    var status = Atlas.el('scanStatus'), video = Atlas.el('cam');
+    Atlas.el('scanBtn').hidden = true;
+    Atlas.el('stopBtn').hidden = false;
+    video.hidden = false;
+    status.textContent = 'Point camera at the class QR…';
+    try {
+      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    } catch (e) {
+      status.textContent = 'Camera unavailable — type Session + Code manually.';
+      Atlas.el('scanBtn').hidden = false;
+      Atlas.el('stopBtn').hidden = true;
+      video.hidden = true;
+      return;
+    }
+    video.srcObject = scanStream;
+    try { await video.play(); } catch (e) {}
+    scanning = true;
+    if ('BarcodeDetector' in window) {
+      try { scanDetector = new BarcodeDetector({ formats: ['qr_code'] }); }
+      catch (e) { scanDetector = new BarcodeDetector(); }
+      beaconLoop();
+    } else {
+      try {
+        await ensureJsQR();
+        jsqrLoop();
+      } catch (e) {
+        status.textContent = 'Scanner unavailable — type Session + Code manually.';
+        stopScan();
+      }
+    }
+  }
+
+  function stopScan() {
+    scanning = false;
+    if (scanRaf) { cancelAnimationFrame(scanRaf); scanRaf = 0; }
+    if (scanStream) { scanStream.getTracks().forEach(function (t) { t.stop(); }); scanStream = null; }
+    var video = Atlas.el('cam');
+    if (video) { try { video.pause(); } catch (e) {} video.srcObject = null; video.hidden = true; }
+    if (Atlas.el('scanBtn')) Atlas.el('scanBtn').hidden = false;
+    if (Atlas.el('stopBtn')) Atlas.el('stopBtn').hidden = true;
+  }
+
+  async function beaconLoop() {
+    if (!scanning) return;
+    try {
+      var codes = await scanDetector.detect(Atlas.el('cam'));
+      if (codes && codes.length && codes[0].rawValue) { onScanned(codes[0].rawValue); return; }
+    } catch (e) {}
+    if (scanning) setTimeout(beaconLoop, 350);
+  }
+
+  function ensureJsQR() {
+    if (window.jsQR) return Promise.resolve();
+    if (jsqrLoading) return jsqrLoading;
+    jsqrLoading = new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    return jsqrLoading;
+  }
+
+  function jsqrLoop() {
+    if (!scanning) return;
+    var video = Atlas.el('cam'), canvas = Atlas.el('frame');
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      try {
+        var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var found = window.jsQR(img.data, img.width, img.height);
+        if (found && found.data) { onScanned(found.data); return; }
+      } catch (e) {}
+    }
+    if (scanning) scanRaf = requestAnimationFrame(jsqrLoop);
+  }
+
+  function onScanned(text) {
+    var parsed = Atlas.parseQRPayload(text);
+    if (parsed.sessionId) {
+      Atlas.el('sess').value = parsed.sessionId;
+      Atlas.el('asess').value = parsed.sessionId;
+    }
+    if (parsed.code) Atlas.el('code').value = parsed.code;
+    Atlas.el('scanStatus').textContent = 'Scanned — verify Session + Code, then Check in.';
+    stopScan();
+  }
+
+  /* GPS */
+  Atlas.el('gps').onclick = function () {
+    if (!navigator.geolocation) { Atlas.msg('m', 'Geolocation is not supported by this browser.', true); return; }
+    var btn = Atlas.el('gps');
+    btn.classList.add('loading');
+    navigator.geolocation.getCurrentPosition(function (p) {
+      btn.classList.remove('loading');
+      Atlas.el('lat').value = p.coords.latitude.toFixed(6);
+      Atlas.el('lng').value = p.coords.longitude.toFixed(6);
+      var b = Atlas.el('gpsBadge');
+      b.textContent = '✓ GPS lock ±' + Math.round(p.coords.accuracy) + ' m';
+      b.className = 'gps-badge locked';
+    }, function (e) {
+      btn.classList.remove('loading');
+      Atlas.msg('m', 'Location denied: ' + e.message, true);
+    });
   };
 
+  /* check-in */
   document.getElementById('scan').addEventListener('submit', async function (e) {
     e.preventDefault();
+    var btn = Atlas.el('checkInBtn');
+    btn.classList.add('loading'); btn.disabled = true;
     var r = await Atlas.api('POST', '/v1/attendance/scan', {
-      session_id: +Atlas.el('sess').value, code: Atlas.el('code').value.trim(),
-      lat: +Atlas.el('lat').value, lng: +Atlas.el('lng').value
+      session_id: +Atlas.el('sess').value,
+      code: Atlas.el('code').value.trim(),
+      lat: +Atlas.el('lat').value,
+      lng: +Atlas.el('lng').value
     });
+    btn.classList.remove('loading'); btn.disabled = false;
     if (r.status !== 200) { Atlas.msg('m', Atlas.scanError(r.status, r.data), true); return; }
-    Atlas.msg('m', 'Checked in: ' + r.data.status + ' (' + (r.data.distance_m || 0) + ' m)', false);
+    Atlas.msg('m', 'Checked in — status: ' + r.data.status + (r.data.distance_m != null ? ' (' + r.data.distance_m + ' m)' : ''), false);
     loadMine();
   });
 
   async function loadMine() {
     var sid = +Atlas.el('sess').value;
-    if (!sid) { Atlas.el('mine').innerHTML = '<li>enter a session ID above, then check in</li>'; return; }
+    var list = Atlas.el('mine');
+    if (!sid) {
+      list.innerHTML = '<li><span class="empty" style="padding:1.25rem 0;display:block">Enter a session ID and check in above.</span></li>';
+      return;
+    }
     var r = await Atlas.api('GET', '/v1/attendance?session_id=' + sid);
     if (r.status !== 200) return;
-    Atlas.el('mine').innerHTML = r.data.records.map(function (x) {
-      return '<li>#' + x.student_id + ' — ' + x.status + ' @ ' + x.recorded_at + '</li>';
-    }).join('') || '<li>(no record)</li>';
+    list.innerHTML = r.data.records.map(function (x) {
+      var sc = x.status === 'present' ? 'badge--green' : x.status === 'absent' ? 'badge--red' : 'badge--yellow';
+      return '<li>' +
+        '<span class="badge ' + sc + '">' + x.status + '</span>' +
+        '<span class="text-muted text-sm ml-auto">' + fmtTime(x.recorded_at) + '</span>' +
+        '</li>';
+    }).join('') || '<li><span class="empty" style="padding:1.25rem 0;display:block">No record for this session.</span></li>';
   }
+
   Atlas.el('sess').addEventListener('change', loadMine);
 
+  /* absence */
   document.getElementById('abs').addEventListener('submit', async function (e) {
     e.preventDefault();
+    var btn = Atlas.el('absBtn');
+    btn.classList.add('loading'); btn.disabled = true;
     var fd = new FormData();
     fd.append('session_id', Atlas.el('asess').value);
     fd.append('reason_type', Atlas.el('reason').value);
     fd.append('file', Atlas.el('file').files[0]);
     var r = await Atlas.api('POST', '/v1/absences', fd);
+    btn.classList.remove('loading'); btn.disabled = false;
     if (r.status !== 200) { Atlas.msg('m2', Atlas.uploadError(r.status, r.data), true); return; }
-    Atlas.msg('m2', 'Absence #' + r.data.id + ' submitted', false);
+    Atlas.msg('m2', 'Request #' + r.data.id + ' submitted — pending review.', false);
+    document.getElementById('abs').reset();
     loadReqs();
   });
 
   async function loadReqs() {
     var r = await Atlas.api('GET', '/v1/absences');
     if (r.status !== 200) return;
-    Atlas.el('reqs').innerHTML = r.data.requests.map(function (x) {
-      return '<li>#' + x.id + ' session #' + x.session_id + ' ' + x.reason_type + ' — ' + x.status + '</li>';
-    }).join('') || '<li>(none)</li>';
+    var list = Atlas.el('reqs');
+    list.innerHTML = r.data.requests.map(function (x) {
+      var sc = x.status === 'approved' ? 'badge--green' : x.status === 'rejected' ? 'badge--red' : 'badge--yellow';
+      return '<li>' +
+        '<span class="text-subtle text-xs">#' + x.id + '</span>' +
+        '<span>Session ' + x.session_id + '</span>' +
+        '<span class="text-muted text-sm">· ' + cap(x.reason_type) + '</span>' +
+        '<span class="badge ' + sc + ' ml-auto">' + x.status + '</span>' +
+        '</li>';
+    }).join('') || '<li><span class="empty" style="padding:1.25rem 0;display:block">No requests yet.</span></li>';
   }
-  loadReqs();
+
+  function fmtTime(iso) {
+    if (!iso) return '';
+    try { return new Date(iso).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }); }
+    catch (e) { return iso; }
+  }
+
+  function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 })();
 </script>
 </body>
