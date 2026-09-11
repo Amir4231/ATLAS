@@ -5,44 +5,126 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Atlas — Admin</title>
 <link rel="manifest" href="manifest.json">
-<style>
-body{font-family:system-ui,sans-serif;max-width:720px;margin:1rem auto;padding:0 1rem}
-input,button{font-size:1rem;padding:.5rem;margin:.25rem 0}button{cursor:pointer}
-.msg{margin:.5rem 0}.err{color:#b00}.ok{color:#060}
-table{border-collapse:collapse;width:100%;font-size:.9rem}td,th{border:1px solid #999;padding:.3rem .5rem;text-align:left}
-.top{display:flex;justify-content:space-between;align-items:baseline}
-label{display:block;margin:.3rem 0}
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="top"><h1>Admin</h1><span><span id="who"></span> <button id="out">Logout</button></span></div>
 
-<h2>College rate</h2>
-<div id="college"></div>
+<nav class="topbar">
+  <a href="index.html" class="topbar__brand">
+    <div class="topbar__brand-icon">A</div>
+    Atlas
+  </a>
+  <div class="topbar__user">
+    <span class="topbar__email" id="who"></span>
+    <button class="btn btn--ghost btn--sm" id="out">Sign out</button>
+  </div>
+</nav>
 
-<h2>Create class</h2>
-<form id="cf">
-<label>Name <input id="name" required></label>
-<label>Homeroom teacher ID <input id="tid" type="number" placeholder="(optional)"></label>
-<label>Geofence lat <input id="lat" type="number" step="any" value="3.1390" required></label>
-<label>Geofence lng <input id="lng" type="number" step="any" value="101.6869" required></label>
-<label>Radius (m) <input id="rad" type="number" value="30" required></label>
-<button type="submit">Create</button>
-</form>
-<p id="m" class="msg"></p>
+<div class="page-wrap">
+  <div class="page-header">
+    <h1>Admin</h1>
+    <p>College overview, class management, and system audit log.</p>
+  </div>
 
-<h2>Classes</h2>
-<ul id="cls"></ul>
+  <!-- College stats -->
+  <section>
+    <div class="section-title">
+      <div class="section-title__icon">🏫</div>
+      <h2>College attendance</h2>
+    </div>
+    <div id="college" class="stats">
+      <div class="stat">
+        <div class="stat__label">Loading</div>
+        <div class="stat__value">—</div>
+      </div>
+    </div>
+  </section>
 
-<h2>Audit log</h2>
-<button id="audit">Refresh audit</button>
-<table><thead><tr><th>id</th><th>actor</th><th>action</th><th>entity</th><th>entity_id</th><th>at</th></tr></thead>
-<tbody id="logs"></tbody></table>
+  <!-- Create class -->
+  <section>
+    <div class="section-title">
+      <div class="section-title__icon">＋</div>
+      <h2>Create class</h2>
+    </div>
+    <form id="cf">
+      <div class="field-row">
+        <div class="field">
+          <label for="name">Class name</label>
+          <input id="name" required placeholder="e.g. CS101 Group A">
+        </div>
+        <div class="field">
+          <label for="tid">Homeroom teacher ID</label>
+          <input id="tid" type="number" placeholder="Optional">
+        </div>
+      </div>
+      <div class="field-row--3 field-row">
+        <div class="field" style="margin:0">
+          <label for="lat">Geofence latitude</label>
+          <input id="lat" type="number" step="any" value="3.1390" required>
+        </div>
+        <div class="field" style="margin:0">
+          <label for="lng">Geofence longitude</label>
+          <input id="lng" type="number" step="any" value="101.6869" required>
+        </div>
+        <div class="field" style="margin:0">
+          <label for="rad">Radius (m)</label>
+          <input id="rad" type="number" value="30" required>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button type="submit" id="createBtn" class="btn btn--primary">Create class</button>
+      </div>
+    </form>
+    <div id="m" class="msg"></div>
+  </section>
+
+  <!-- Classes -->
+  <section>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.1rem;padding-bottom:.875rem;border-bottom:1px solid var(--border)">
+      <div class="flex items-center gap-2">
+        <div class="section-title__icon" style="width:28px;height:28px;border-radius:6px;background:var(--accent-faint);display:flex;align-items:center;justify-content:center;font-size:.875rem">📚</div>
+        <span style="font-size:.9375rem;font-weight:700;letter-spacing:-.01em">Classes</span>
+      </div>
+    </div>
+    <ul id="cls" class="item-list">
+      <li><span class="empty" style="padding:1.25rem 0;display:block">Loading…</span></li>
+    </ul>
+  </section>
+
+  <!-- Audit log -->
+  <section>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.1rem;padding-bottom:.875rem;border-bottom:1px solid var(--border)">
+      <div class="flex items-center gap-2">
+        <div class="section-title__icon" style="width:28px;height:28px;border-radius:6px;background:var(--accent-faint);display:flex;align-items:center;justify-content:center;font-size:.875rem">🔍</div>
+        <span style="font-size:.9375rem;font-weight:700;letter-spacing:-.01em">Audit log</span>
+      </div>
+      <button id="audit" class="btn btn--secondary btn--sm">Refresh</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Actor</th>
+            <th>Action</th>
+            <th>Entity</th>
+            <th>ID</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody id="logs">
+          <tr><td colspan="6" class="empty" style="padding:1.5rem">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
 
 <script src="app.js"></script>
 <script>
 (function () {
   Atlas.el('out').onclick = Atlas.logout;
+
   Atlas.requireRole(['admin']).then(function (me) {
     if (!me) return;
     Atlas.el('who').textContent = me.email;
@@ -51,13 +133,31 @@ label{display:block;margin:.3rem 0}
 
   async function loadCollege() {
     var r = await Atlas.api('GET', '/v1/analytics/college');
-    Atlas.el('college').textContent = r.status === 200
-      ? 'present ' + r.data.present + ' / ' + r.data.total + ' (' + r.data.pct + '%)'
-      : 'College analytics failed (' + r.status + ')';
+    var box = Atlas.el('college');
+    if (r.status !== 200) {
+      box.innerHTML = '<div class="stat"><div class="stat__label">Error</div><div class="stat__value">—</div><div class="stat__sub">Could not load</div></div>';
+      return;
+    }
+    var pct = r.data.pct || 0;
+    var pctClass = pct >= 75 ? 'badge--green' : pct >= 50 ? 'badge--yellow' : 'badge--red';
+    var label = pct >= 75 ? 'Good' : pct >= 50 ? 'Fair' : 'Low';
+    box.innerHTML =
+      '<div class="stat">' +
+        '<div class="stat__label">Present today</div>' +
+        '<div class="stat__value">' + (r.data.present || 0) + '</div>' +
+        '<div class="stat__sub">of ' + (r.data.total || 0) + ' enrolled</div>' +
+      '</div>' +
+      '<div class="stat">' +
+        '<div class="stat__label">Attendance rate</div>' +
+        '<div class="stat__value">' + pct + '%</div>' +
+        '<div class="stat__sub"><span class="badge ' + pctClass + '">' + label + '</span></div>' +
+      '</div>';
   }
 
   document.getElementById('cf').addEventListener('submit', async function (e) {
     e.preventDefault();
+    var btn = Atlas.el('createBtn');
+    btn.classList.add('loading'); btn.disabled = true;
     var body = {
       class_name: Atlas.el('name').value.trim(),
       geofence_lat: +Atlas.el('lat').value,
@@ -66,8 +166,10 @@ label{display:block;margin:.3rem 0}
     };
     if (Atlas.el('tid').value) body.homeroom_teacher_id = +Atlas.el('tid').value;
     var r = await Atlas.api('POST', '/v1/admin/classes', body);
-    if (r.status !== 200) { Atlas.msg('m', 'Create class failed (' + r.status + '): ' + (r.data.error || ''), true); return; }
-    Atlas.msg('m', 'Class #' + r.data.id + ' created', false);
+    btn.classList.remove('loading'); btn.disabled = false;
+    if (r.status !== 200) { Atlas.msg('m', 'Create failed (' + r.status + '): ' + (r.data.error || ''), true); return; }
+    Atlas.msg('m', 'Class #' + r.data.id + ' created successfully.', false);
+    document.getElementById('cf').reset();
     loadClasses();
   });
 
@@ -75,19 +177,40 @@ label{display:block;margin:.3rem 0}
     var r = await Atlas.api('GET', '/v1/classes');
     if (r.status !== 200) return;
     Atlas.el('cls').innerHTML = r.data.classes.map(function (c) {
-      return '<li>#' + c.id + ' ' + c.class_name + ' @ ' + c.geofence_lat + ',' + c.geofence_lng + ' r=' + c.geofence_radius_m + 'm</li>';
-    }).join('');
+      return '<li>' +
+        '<span class="badge badge--blue" style="flex-shrink:0">#' + c.id + '</span>' +
+        '<span class="font-semibold">' + c.class_name + '</span>' +
+        '<span class="text-subtle text-xs ml-auto" style="text-align:right">' +
+          c.geofence_lat + ', ' + c.geofence_lng + ' · r=' + c.geofence_radius_m + 'm' +
+        '</span>' +
+        '</li>';
+    }).join('') || '<li><span class="empty" style="padding:1.25rem 0;display:block">No classes created yet.</span></li>';
   }
 
   Atlas.el('audit').onclick = loadAudit;
+
   async function loadAudit() {
+    var btn = Atlas.el('audit');
+    btn.classList.add('loading'); btn.disabled = true;
     var r = await Atlas.api('GET', '/v1/audit-logs?limit=50');
-    if (r.status !== 200) { Atlas.msg('m', 'Audit load failed (' + r.status + ')', true); return; }
+    btn.classList.remove('loading'); btn.disabled = false;
+    if (r.status !== 200) { Atlas.msg('m', 'Audit load failed (' + r.status + ').', true); return; }
     Atlas.el('logs').innerHTML = r.data.logs.map(function (l) {
-      return '<tr><td>' + l.id + '</td><td>' + (l.actor_id == null ? '—' : l.actor_id) +
-        '</td><td>' + l.action + '</td><td>' + l.entity + '</td><td>' + l.entity_id +
-        '</td><td>' + l.created_at + '</td></tr>';
-    }).join('');
+      return '<tr>' +
+        '<td class="text-subtle text-xs">' + l.id + '</td>' +
+        '<td class="text-sm">' + (l.actor_id == null ? '<span class="text-subtle">—</span>' : l.actor_id) + '</td>' +
+        '<td><code>' + l.action + '</code></td>' +
+        '<td class="text-sm">' + l.entity + '</td>' +
+        '<td class="text-subtle text-xs">' + l.entity_id + '</td>' +
+        '<td class="text-subtle text-xs" style="white-space:nowrap">' + fmtTime(l.created_at) + '</td>' +
+        '</tr>';
+    }).join('') || '<tr><td colspan="6" class="empty" style="padding:1.5rem">No logs yet.</td></tr>';
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return '—';
+    try { return new Date(iso).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }); }
+    catch (e) { return iso; }
   }
 })();
 </script>

@@ -3,36 +3,63 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Atlas — Login</title>
+<title>Atlas — Sign in</title>
 <link rel="manifest" href="manifest.json">
-<style>
-body{font-family:system-ui,sans-serif;max-width:480px;margin:2rem auto;padding:0 1rem}
-label{display:block;margin:.6rem 0 .2rem}input,button{font-size:1rem;padding:.5rem;width:100%;box-sizing:border-box}
-button{margin-top:1rem}.msg{margin-top:1rem}.err{color:#b00}.ok{color:#060}
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1>Atlas Attendance</h1>
-<form id="f">
-<label>Email <input id="email" type="email" required autocomplete="username"></label>
-<label>Password <input id="password" type="password" required autocomplete="current-password"></label>
-<button type="submit">Log in</button>
-</form>
-<p id="m" class="msg"></p>
+<div class="login-wrap">
+  <div class="login-box">
+    <div class="login-box__header">
+      <div class="login-box__logo">A</div>
+      <h1>Atlas Attendance</h1>
+      <p>Sign in to your account to continue</p>
+    </div>
+    <div class="login-box__body">
+      <form id="f">
+        <div class="field">
+          <label for="email">Email address</label>
+          <input id="email" type="email" required autocomplete="username" placeholder="you@school.edu">
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" type="password" required autocomplete="current-password" placeholder="••••••••">
+        </div>
+        <div class="btn-row" style="margin-top:1.25rem">
+          <button id="submitBtn" type="submit" class="btn btn--primary btn--full">Sign in</button>
+        </div>
+      </form>
+      <div id="m" class="msg"></div>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 <script>
 (function () {
-  // If already authed, route straight to the role page.
   Atlas.api('GET', '/v1/me').then(function (r) {
     if (r.status === 200 && r.data.role && Atlas.getToken()) location.href = Atlas.roleHome(r.data.role);
   });
+
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+
   document.getElementById('f').addEventListener('submit', async function (e) {
     e.preventDefault();
+    var btn = Atlas.el('submitBtn');
+    btn.classList.add('loading'); btn.disabled = true;
+
     var r = await Atlas.login(Atlas.el('email').value.trim(), Atlas.el('password').value);
-    if (!r.ok) { Atlas.msg('m', 'Login failed (' + r.status + '): ' + r.error, true); return; }
+    if (!r.ok) {
+      Atlas.msg('m', 'Incorrect email or password. Please try again.', true);
+      btn.classList.remove('loading'); btn.disabled = false;
+      return;
+    }
     var me = await Atlas.api('GET', '/v1/me');
-    if (me.status !== 200) { Atlas.msg('m', 'Logged in but /v1/me failed (' + me.status + ')', true); return; }
+    if (me.status !== 200) {
+      Atlas.msg('m', 'Signed in but could not load your profile (' + me.status + ').', true);
+      btn.classList.remove('loading'); btn.disabled = false;
+      return;
+    }
     location.href = Atlas.roleHome(me.data.role);
   });
 })();
