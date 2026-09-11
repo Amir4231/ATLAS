@@ -2,3 +2,7 @@
 data/
 uploads/*
 !uploads/.gitkeep
+.superpowers/
+.vscode/
+docs/
+android-mcp.log
